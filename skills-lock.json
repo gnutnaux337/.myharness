@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "brainstorming": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/brainstorming/SKILL.md",
+      "computedHash": "253570c46990ea018dd4520dba80cd77c35f9e5a8654057da1812face7be30cd"
+    },
+    "spring-webflux": {
+      "source": "claude-dev-suite/claude-dev-suite",
+      "sourceType": "github",
+      "skillPath": "skills/backend-frameworks/spring-webflux/SKILL.md",
+      "computedHash": "fc6f4c1472ec4a5c57800183558b0a8440acfacbfbfdb7f77a79cf8ebe001cd2"
+    },
+    "webflux-reactive-patterns": {
+      "source": "jheisonmb/skills",
+      "sourceType": "github",
+      "skillPath": "webflux-reactive-patterns/SKILL.md",
+      "computedHash": "e8c55f21ecd855935cd5b77f58e349012ac67ce087e7e52b679e0769176668ec"
+    }
+  }
+}
