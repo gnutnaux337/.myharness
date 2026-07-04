@@ -11,7 +11,7 @@ By running any of these commands from your project root, a temporary sparse clon
 For use in modern Windows PowerShell or PowerShell Core:
 
 ```powershell
-git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness; cd temp_harness; git sparse-checkout set .agents AGENTS.md; Copy-Item -Path .agents -Destination ..\.agents -Recurse -Force; Copy-Item -Path AGENTS.md -Destination ..\AGENTS.md -Force; cd ..; Remove-Item -Path temp_harness -Recurse -Force
+git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness; cd temp_harness; git sparse-checkout set .agents; Copy-Item -Path .agents -Destination ..\.agents -Recurse -Force; Copy-Item -Path AGENTS.md -Destination ..\AGENTS.md -Force; cd ..; Remove-Item -Path temp_harness -Recurse -Force
 ```
 
 ---
@@ -21,7 +21,7 @@ git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.
 For use in standard Windows CMD:
 
 ```cmd
-git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness && cd temp_harness && git sparse-checkout set .agents AGENTS.md && xcopy /E /I /Y .agents ..\.agents && copy /Y AGENTS.md ..\AGENTS.md && cd .. && rmdir /S /Q temp_harness
+git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness && cd temp_harness && git sparse-checkout set .agents && xcopy /E /I /Y .agents ..\.agents && copy /Y AGENTS.md ..\AGENTS.md && cd .. && rmdir /S /Q temp_harness
 ```
 
 ---
@@ -31,5 +31,5 @@ git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.
 For use in Linux or macOS terminal environments:
 
 ```bash
-git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness && cd temp_harness && git sparse-checkout set .agents AGENTS.md && cp -r .agents ../.agents && cp AGENTS.md ../AGENTS.md && cd .. && rm -rf temp_harness
+git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.myharness.git temp_harness && cd temp_harness && git sparse-checkout set .agents && cp -r .agents ../.agents && cp AGENTS.md ../AGENTS.md && cd .. && rm -rf temp_harness
 ```
