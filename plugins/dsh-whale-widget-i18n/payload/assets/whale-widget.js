@@ -2093,7 +2093,11 @@ var styleEl = document.createElement('style')
 // 一起删掉。样式一没，挂件 20 多个 dshwv-* 节点就从 position:fixed 掉回文档流堆在
 // 页面底部（页面被撑到几千像素高）。打上自己的名字后就不会被任何人认领/删除。
 styleEl.setAttribute('data-plugin', 'dsh-whale-widget')
-styleEl.textContent = css
+styleEl.textContent = css + ('.dshwv-text.dshwv-quota{left:44.25%;top:35.43%;width:60%;height:48%;max-height:48%;overflow:auto;gap:3px;pointer-events:auto;line-height:1.3;justify-content:safe center;text-align:center}' +
+  '.dshwv-quota .dshwv-label,.dshwv-quota .dshwv-amount,.dshwv-quota .dshwv-hint{box-sizing:border-box;flex-shrink:0;width:100%;max-width:100%;margin:0!important;min-height:0!important;letter-spacing:0!important;line-height:1.3!important;font-family:system-ui,sans-serif!important;text-shadow:none!important;text-align:center!important}' +
+  '.dshwv-quota .dshwv-label{font-size:clamp(8px,calc(var(--dshw-u) * 64),14px)!important;font-weight:600!important;white-space:normal!important}' +
+  '.dshwv-quota .dshwv-amount{font-size:clamp(7px,calc(var(--dshw-u) * 55),12px)!important;font-weight:500!important;white-space:normal!important;overflow-wrap:anywhere}' +
+  '.dshwv-quota .dshwv-hint{font-size:clamp(7px,calc(var(--dshw-u) * 55),12px)!important;font-weight:400!important;white-space:pre-line!important;overflow-wrap:anywhere;color:inherit!important}')
 document.head.appendChild(styleEl)
 
 // ===== v743：body 挂载登记器（DOM 守护的基础设施，见下面 dshwReattachRoot）=====
@@ -6653,12 +6657,17 @@ function usageAppendLine(body, m, below, amount) {
     body.appendChild(div)
   } catch (err) {}
 }
+var dshwStartupBalanceAligned = false
 function checkUsageAlerts(balance, todayUsage) {
   try {
     if (!usageSet) return
     var a = usageSet.alert
     if (a && a.on) {
       var below = Number(a.below)
+      if (!dshwStartupBalanceAligned && isFinite(below) && typeof balance === "number" && isFinite(balance)) {
+        dshwStartupBalanceAligned = true
+        usageAlertBelowFired = balance > 0 && balance <= below
+      }
       if (isFinite(below) && typeof balance === 'number' && balance > 0 && balance <= below) {
         if (!usageAlertBelowFired) {
           usageAlertBelowFired = true
@@ -15012,6 +15021,8 @@ function bubbleRenderModules(mods) {
     // 该标记不可能残留成"其实没显示却以为在显示"。
     waitShown = !!(bubbleScene && bubbleScene.kind === 'wait')
     bubbleLiveMods = Array.isArray(mods) ? mods.slice() : null
+    if (!costBubbleActive && dshwQuotaBalanceMods(mods) && dshwQuotaText() !== null) { gifEl.style.display = "none"; dshwRenderQuota(); return }
+    textBox.classList.remove("dshwv-quota"); textBox.title = ""
     // 清掉旧模块行,隐藏老三行与 gif(它们仍保留在 DOM 供普通场景使用)
     gifEl.style.display = 'none'
     labelEl.style.display = 'none'
@@ -15443,7 +15454,88 @@ function animateAmount(from, to, currency, duration) {
   }
   animId = requestAnimationFrame(step)
 }
+// The client slot supplies sanitized account-aware information, never credentials.
+var dshwActiveChat = window.__dshWhaleActiveChat || null
+// Oval body: SVG ellipse center (454,248), excluding the lower speech tail.
+var dshwQuotaCss = '.dshwv-text.dshwv-quota{left:44.25%;top:35.43%;width:60%;height:48%;max-height:48%;overflow:auto;gap:3px;pointer-events:auto;line-height:1.3;justify-content:safe center;text-align:center}' +
+  '.dshwv-quota .dshwv-label,.dshwv-quota .dshwv-amount,.dshwv-quota .dshwv-hint{box-sizing:border-box;flex-shrink:0;width:100%;max-width:100%;margin:0!important;min-height:0!important;letter-spacing:0!important;line-height:1.3!important;font-family:system-ui,sans-serif!important;text-shadow:none!important;text-align:center!important}' +
+  '.dshwv-quota .dshwv-label{font-size:clamp(8px,calc(var(--dshw-u) * 64),14px)!important;font-weight:600!important;white-space:normal!important}' +
+  '.dshwv-quota .dshwv-amount{font-size:clamp(7px,calc(var(--dshw-u) * 55),12px)!important;font-weight:500!important;white-space:normal!important;overflow-wrap:anywhere}' +
+  '.dshwv-quota .dshwv-hint{font-size:clamp(7px,calc(var(--dshw-u) * 55),12px)!important;font-weight:400!important;white-space:pre-line!important;overflow-wrap:anywhere;color:inherit!important}'
+function dshwQuotaResetText(minutes, en) {
+  var days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60), mins = minutes % 60, parts = []
+  if (days) parts.push(days + (en ? 'd' : '\u5929'))
+  if (hours) parts.push(hours + (en ? 'h' : '\u5c0f\u65f6'))
+  if (mins || !parts.length) parts.push(mins + (en ? 'm' : '\u5206\u949f'))
+  return parts.join(' ')
+}
+function dshwQuotaText() {
+  if (!dshwActiveChat) return null
+  var en = dshwLang() === 'en'
+  if (dshwActiveChat.provider === 'openai') return en ? 'ChatGPT quota not applicable\nLocal tokens unavailable' : 'ChatGPT \u989d\u5ea6\u4e0d\u9002\u7528\n\u672c\u5730 token \u4e0d\u53ef\u7528'
+  if (dshwActiveChat.provider !== 'codex') return null
+  var data = dshwActiveChat
+  if (data.status === 'loading') return en ? 'Quota loading\u2026' : '\u989d\u5ea6\u52a0\u8f7d\u4e2d\u2026'
+  if (!data.windows || !data.windows.length) return en ? 'Quota unavailable' : '\u989d\u5ea6\u4e0d\u53ef\u7528'
+  var stale = data.status === 'stale' || Date.now() - data.updatedAt > 120000 || data.windows.some(function (w) { return w.resetsAt !== null && w.resetsAt <= Date.now() })
+  var lines = data.windows.map(function (w) {
+    var remaining = Math.max(0, Math.min(100, Number(w.remaining) || 0))
+    var allowance = w.kind === 'session' ? (en ? 'five-hour' : '\u4e94\u5c0f\u65f6') : w.kind === 'weekly' ? (en ? 'weekly' : '\u6bcf\u5468') : String(w.kind)
+    var text = en ? (w.kind === 'weekly' ? 'Your weekly allowance has ' + remaining + '% left, Sir.' : 'Sir, you have ' + remaining + '% left in your ' + allowance + ' allowance.') : '\u5148\u751f\uff0c\u60a8\u7684' + allowance + '\u989d\u5ea6\u8fd8\u5269 ' + remaining + '%\u3002'
+    if (stale) text = (en ? 'Last known: ' : '\u4e0a\u6b21\u67e5\u8be2\uff1a') + text
+    if (w.resetsAt !== null && isFinite(w.resetsAt) && w.resetsAt <= Date.now()) {
+      text += en ? ' Awaiting refreshed quota.' : '\u6b63\u5728\u7b49\u5f85\u989d\u5ea6\u66f4\u65b0\u3002'
+    } else if (w.resetsAt !== null && isFinite(w.resetsAt)) {
+      var minutes = Math.max(0, Math.ceil((w.resetsAt - Date.now()) / 60000))
+      text += en ? ' It resets in ' + dshwQuotaResetText(minutes, en) + '.' : '\u5c06\u5728 ' + dshwQuotaResetText(minutes, en) + '\u540e\u91cd\u7f6e\u3002'
+    }
+    return text
+  })
+  return lines.join('\n') + (stale ? '\n' + (en ? 'Stale' : '\u65e7\u6570\u636e') : '')
+}
+function dshwQuotaBalanceMods(mods) {
+  return Array.isArray(mods) && mods.some(function (m) { return m && m.type === 'balance' && (!m.modelId || m.modelId === 'deepseek') })
+}
+function dshwQuotaSceneAllowed() {
+  return typeof bubbleLiveMods === 'undefined' || !bubbleLiveMods || dshwQuotaBalanceMods(bubbleLiveMods)
+}
+function dshwRenderQuota() {
+  if (!dshwQuotaSceneAllowed()) { textBox.classList.toggle('dshwv-quota', false); textBox.title = ''; return false }
+  var text = dshwQuotaText(), active = text !== null, en = dshwLang() === 'en'
+  textBox.classList.toggle('dshwv-quota', active)
+  if (!active) {
+    if (dshwRenderQuota.wasActive) { labelEl.textContent = dshwT('DeepSeek \u4f59\u989d'); textBox.title = '' }
+    var restoreMods = dshwRenderQuota.wasActive && typeof bubbleLiveMods !== 'undefined' && bubbleLiveMods && dshwQuotaBalanceMods(bubbleLiveMods)
+    dshwRenderQuota.wasActive = false
+    if (restoreMods) { bubbleRenderModules(bubbleLiveMods); return true }
+    return false
+  }
+  dshwRenderQuota.wasActive = true
+  var oldQuotaRows = textBox.querySelectorAll('.dshwv-trow, .dshwv-mimg')
+  for (var qi = 0; qi < oldQuotaRows.length; qi++) { try { textBox.removeChild(oldQuotaRows[qi]) } catch (error) {} }
+  // Clear pending balance-hint transitions so old text cannot overwrite quota rows.
+  if (hintFadeTimer) { clearTimeout(hintFadeTimer); hintFadeTimer = null }
+  labelEl.className = 'dshwv-label'; amountEl.className = 'dshwv-amount'; hintEl.className = 'dshwv-hint'
+  labelEl.style.display = ''; amountEl.style.display = ''; hintEl.style.display = ''
+  hintEl.style.opacity = ''; hintEl.style.transition = ''
+  var codex = dshwActiveChat.provider === 'codex'
+  labelEl.textContent = codex ? (en ? 'At your service, Sir \u2661' : '\u7aed\u8bda\u4e3a\u60a8\u670d\u52a1\uff0c\u5148\u751f \u2661') : 'OpenAI API'
+  var model = String(dshwActiveChat.model || '').replace(/\s+/g, ' ').trim()
+  var shortModel = model.length > 22 ? model.slice(0, 21) + '\u2026' : model
+  amountEl.textContent = (shortModel ? shortModel + ' \u00b7 ' : '') + (codex ? (en ? 'Default account' : '\u9ed8\u8ba4\u8d26\u6237') : (en ? 'API key' : 'API key'))
+  textBox.title = (model ? model + '\n' : '') + (codex ? (en ? 'Default account quota; not pool-route attribution.' : '\u9ed8\u8ba4\u8d26\u6237\u989d\u5ea6\uff0c\u975e\u6c60\u8def\u7531\u5f52\u5c5e\u3002') : (en ? 'API key usage is not ChatGPT subscription quota.' : 'API key \u7528\u91cf\u4e0d\u662f ChatGPT \u8ba2\u9605\u989d\u5ea6\u3002'))
+  if (dshwActiveChat.updatedAt) textBox.title += '\n' + (en ? 'Last checked ' : '\u68c0\u67e5\u4e8e ') + new Date(dshwActiveChat.updatedAt).toLocaleTimeString()
+  hintEl.textContent = text; lastHintText = text
+  return true
+}
+window.addEventListener('dsh-whale-active-chat', function (event) {
+  dshwActiveChat = event.detail
+  try { render() } catch (error) {}
+})
+
 function render() {
+  if (!costBubbleActive && dshwRenderQuota()) return
+  if (costBubbleActive) textBox.classList.remove("dshwv-quota")
   // 消耗金额泡泡显示期间，余额渲染不覆盖其内容（金额行/标题行/提示行）
   if (costBubbleActive) return
   var amount, hint

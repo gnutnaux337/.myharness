@@ -1,280 +1,108 @@
-<#
-===========================================================================
- install-whale-i18n.ps1 — add the bilingual (zh/en) interface to the
- dsh-whale-widget DSH plugin, on this machine, from this repo.
-
- The overlay carries both dictionaries inline, so installing needs no build
- step and no network: it copies two files over an existing plugin install and
- keeps a timestamped backup so it can be undone.
-
-   .\scripts\install-whale-i18n.ps1                  # auto-pick the profile
-   .\scripts\install-whale-i18n.ps1 -Profile web     # force a profile
-   .\scripts\install-whale-i18n.ps1 -DryRun          # say what it would do
-   .\scripts\install-whale-i18n.ps1 -Check           # verify only, no changes
-   .\scripts\install-whale-i18n.ps1 -Restore         # roll the newest backup back
-
- Why a script at all: the desktop (Electron) profile is managed by the app and
- `dsh plugin` refuses it by design, and a plugin update replaces the whole
- package directory — so the overlay has to be re-applied, which this makes one
- command. See plugins\dsh-whale-widget-i18n\manifest.json for provenance.
-
- Note: if script execution is blocked, run it as
-   powershell -ExecutionPolicy Bypass -File .\scripts\install-whale-i18n.ps1
-===========================================================================
-#>
 #Requires -Version 5.1
+# Four-file bilingual whale + active Codex overlay. Stop DSH before changing files.
 [CmdletBinding()]
-param(
-  [ValidateSet('auto', 'desktop', 'web')][string]$Profile = 'auto',
-  [string]$DshHome = '',
-  [switch]$Check,
-  [switch]$Restore,
-  [switch]$DryRun,
-  [switch]$Force
-)
-
-$ErrorActionPreference = 'Stop'
-
-$RepoDir    = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$PluginPkg  = 'dsh-whale-widget'
-$OverlayDir = Join-Path $RepoDir 'plugins/dsh-whale-widget-i18n'
-$PayloadDir = Join-Path $OverlayDir 'payload'
-$Manifest   = Join-Path $OverlayDir 'manifest.json'
-
-function Write-Info { param([string]$m) Write-Host $m }
-function Write-Ok   { param([string]$m) Write-Host $m -ForegroundColor Green }
-function Write-Warn { param([string]$m) Write-Host "warning: $m" -ForegroundColor Yellow }
-function Die        { param([string]$m) Write-Host "error: $m" -ForegroundColor Red; exit 1 }
-
-# --- manifest (single source of truth for markers and expected hashes) ------
-if (-not (Test-Path $Manifest)) { Die "manifest missing: $Manifest" }
-$m = Get-Content -Raw $Manifest | ConvertFrom-Json
-$Marker          = $m.marker
-$HostMarker      = $m.hostMarker
-$BaseShaAssets   = $m.baseAssetsSha256
-$BaseShaLib      = $m.baseLibSha256
-$PayloadShaAssets = $m.payloadAssetsSha256
-$PayloadShaLib   = $m.payloadLibSha256
-foreach ($pair in @(@('marker', $Marker), @('hostMarker', $HostMarker), @('baseAssetsSha256', $BaseShaAssets),
-                    @('baseLibSha256', $BaseShaLib), @('payloadAssetsSha256', $PayloadShaAssets), @('payloadLibSha256', $PayloadShaLib))) {
-  if ([string]::IsNullOrWhiteSpace($pair[1])) { Die "manifest is missing a value for $($pair[0])" }
-}
-
-# --- locate DSH_HOME -------------------------------------------------------
+param([ValidateSet('auto','desktop','web')][string]$Profile='auto', [string]$DshHome='', [switch]$Check, [switch]$Restore, [switch]$DryRun, [switch]$Force)
+$ErrorActionPreference='Stop'
+if ($Check -and $Restore) { throw 'Choose only one mode' }
+$Root=Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$Overlay=Join-Path $Root 'plugins/dsh-whale-widget-i18n'
+$Payload=Join-Path $Overlay 'payload'
+$m=Get-Content -Raw -Encoding UTF8 (Join-Path $Overlay 'manifest.json') | ConvertFrom-Json
+$Files=@('assets/whale-widget.js','lib/index.js','lib/client.js','package.json')
+$Keys=@('Assets','Lib','Client','Package')
+function Hash([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Value([string]$Key) { $v=$m.$Key; if ([string]::IsNullOrWhiteSpace($v)) { throw "Missing manifest field $Key" }; return [string]$v }
 if ([string]::IsNullOrWhiteSpace($DshHome)) {
-  if (-not [string]::IsNullOrWhiteSpace($env:DSH_HOME)) { $DshHome = $env:DSH_HOME }
-  else { $DshHome = Join-Path $env:USERPROFILE '.dsh' }
+  if ($env:DSH_HOME) { $DshHome=$env:DSH_HOME } else { $DshHome=Join-Path $HOME '.dsh' }
 }
-if (-not (Test-Path $DshHome)) {
-  Die "DSH_HOME not found: $DshHome (is DSH installed, or pass -DshHome?)"
-}
-
-function Get-PluginDir { param([string]$p)
-  Join-Path (Join-Path (Join-Path (Join-Path $DshHome 'profiles') $p) 'node_modules') $PluginPkg
-}
-
-# --- pick the profile ------------------------------------------------------
-switch ($Profile) {
-  'desktop' { $candidates = @('desktop') }
-  'web'     { $candidates = @('web') }
-  default   { $candidates = @('desktop', 'web') }
-}
-
-$Target = ''
-$TargetProfile = ''
-foreach ($p in $candidates) {
-  $d = Get-PluginDir $p
-  if ((Test-Path (Join-Path $d 'assets/whale-widget.js')) -and (Test-Path (Join-Path $d 'lib/index.js'))) {
-    $Target = $d; $TargetProfile = $p; break
+if (-not (Test-Path -LiteralPath $DshHome -PathType Container)) { throw 'DSH_HOME missing' }
+$Candidates=if ($Profile -eq 'auto') { @('desktop','web') } else { @($Profile) }
+$Target=''; $Selected=''
+foreach ($p in $Candidates) {
+  $d=Join-Path $DshHome "profiles/$p/node_modules/dsh-whale-widget"
+  if ((Test-Path -LiteralPath (Join-Path $d $Files[0]) -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $d $Files[1]) -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $d 'package.json') -PathType Leaf)) {
+    $Target=(Resolve-Path -LiteralPath $d).Path; $Selected=$p; break
   }
 }
-
-function Get-Sha { param([string]$f) (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower() }
-function Test-Marker { param([string]$f, [string]$marker)
-  if (-not (Test-Path $f)) { return $false }
-  (Get-Content -Raw -Path $f).Contains($marker)
-}
-
-function Get-State { param([string]$dir)
-  $wf = Join-Path $dir 'assets/whale-widget.js'
-  $hf = Join-Path $dir 'lib/index.js'
-  if ((Test-Marker $wf $Marker) -and (Test-Marker $hf $HostMarker)) { return 'patched' }
-  if ((Get-Sha $wf) -eq $BaseShaAssets -and (Get-Sha $hf) -eq $BaseShaLib) { return 'pristine' }
-  return 'unknown'
-}
-
-# Backups live under DSH_HOME, NOT inside node_modules: pnpm prunes unknown
-# directories there, so a backup kept next to the plugin can disappear exactly
-# when a plugin update makes it useful.
-$BackupRoot = Join-Path $DshHome '.dshw-i18n-backups'
-function Get-NewestBackup {
-  if (-not (Test-Path $BackupRoot)) { return '' }
-  $dirs = Get-ChildItem -Path $BackupRoot -Directory -Filter "$TargetProfile-*" -ErrorAction SilentlyContinue |
-          Sort-Object -Property Name
-  if ($null -eq $dirs -or $dirs.Count -eq 0) { return '' }
-  return $dirs[$dirs.Count - 1].FullName
-}
-
-if ([string]::IsNullOrWhiteSpace($Target)) {
-  Write-Host "error: the $PluginPkg plugin is not installed in any checked profile" -ForegroundColor Red
-  Write-Host "       checked: $($candidates -join ' ')   (DSH_HOME=$DshHome)"
-  Write-Host @"
-
-Install it first, then re-run this script:
-
-  web profile (CLI-managed, the supported route):
-    dsh plugin --profile web add $PluginPkg
-
-  desktop app (Electron) - the CLI refuses this profile by design:
-    open a chat in the desktop app and ask DSH to install "$PluginPkg"
-    (the app's own plugin manager is scoped to the desktop profile)
-
-"@
-  exit 1
-}
-
-Write-Info "repo      : $RepoDir"
-Write-Info "DSH_HOME  : $DshHome"
-Write-Info "profile   : $TargetProfile"
-Write-Info "plugin    : $Target"
-Write-Info "state     : $(Get-State $Target)"
-$modeLabel = if ($Check) { 'check' } elseif ($Restore) { 'restore' } else { 'install' }
-if ($DryRun) { $modeLabel = "$modeLabel (dry run)" }
-Write-Info "mode      : $modeLabel"
-Write-Host ''
-
-# ---------------------------------------------------------------------------
-# -Check: report only
-# ---------------------------------------------------------------------------
-if ($Check) {
-  $wf = Join-Path $Target 'assets/whale-widget.js'
-  $hf = Join-Path $Target 'lib/index.js'
-  Write-Info "widget i18n markers : $(([regex]::Matches((Get-Content -Raw $wf), [regex]::Escape($Marker))).Count)"
-  Write-Info "host   i18n markers : $(([regex]::Matches((Get-Content -Raw $hf), [regex]::Escape($HostMarker))).Count)"
-  switch (Get-State $Target) {
-    'patched'  {
-      Write-Ok 'the bilingual overlay is installed.'
-      Write-Info 'reminder: the widget half takes effect on a page refresh; the host half needs a DSH restart.'
-    }
-    'pristine' { Write-Warn 'the overlay is NOT installed (plugin files are pristine upstream).' }
-    default    { Write-Warn 'the plugin files match neither pristine upstream nor this overlay (version drift, or already modified).' }
+if (-not $Target) { throw 'Plugin missing; install dsh-whale-widget first (web: dsh plugin --profile web add dsh-whale-widget; desktop: app plugin manager)' }
+$BackupRoot=Join-Path $DshHome '.dshw-i18n-backups'
+foreach ($rel in (@('assets','lib') + $Files)) {
+  $path=Join-Path $Target $rel
+  if (Test-Path -LiteralPath $path) {
+    if (((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Refusing managed symlink/reparse point: $rel" }
   }
-  exit 0
 }
-
-# ---------------------------------------------------------------------------
-# -Restore: put the newest backup back
-# ---------------------------------------------------------------------------
+function Matches([string]$Prefix) {
+  for ($i=0;$i -lt $Files.Count;$i++) {
+    $expected=Value "$Prefix$($Keys[$i])Sha256"; $path=Join-Path $Target $Files[$i]
+    if ($expected -eq 'absent') { if (Test-Path -LiteralPath $path) { return $false } }
+    elseif (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $false }
+    elseif ((Hash $path) -ne $expected) { return $false }
+  }; return $true
+}
+function State { if (Matches 'payload') { 'patched' } elseif (Matches 'base') { 'pristine' } elseif (Matches 'previous') { 'previous-overlay' } elseif (Matches 'codex') { 'codex-overlay' } elseif (Matches 'compact') { 'compact-overlay' } elseif (Matches 'maid') { 'maid-overlay' } else { 'unknown' } }
+function UniqueBackup {
+  $base=Join-Path $BackupRoot "$Selected-$(Get-Date -Format yyyyMMdd-HHmmss)"; $n=0
+  while (Test-Path -LiteralPath "$base-$n") { $n++ }; return "$base-$n"
+}
+function Backup([string]$Dest) {
+  New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+  foreach ($rel in $Files) {
+    $src=Join-Path $Target $rel; $dst=Join-Path $Dest $rel
+    New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
+    if (Test-Path -LiteralPath $src -PathType Leaf) {
+      Copy-Item -LiteralPath $src -Destination $dst -Force
+      [IO.File]::WriteAllText("$dst.sha256",(Hash $dst))
+    } elseif (-not (Test-Path -LiteralPath $src)) { [IO.File]::WriteAllText("$dst.absent",'') }
+    else { throw "Not a regular file: $src" }
+  }; [IO.File]::WriteAllText((Join-Path $Dest '.complete'),'')
+}
+function ValidateBackup([string]$b) {
+  if (-not (Test-Path -LiteralPath (Join-Path $b '.complete'))) { throw 'Backup incomplete or legacy two-file backup; use original installer' }
+  foreach ($rel in $Files) {
+    $src=Join-Path $b $rel
+    if (Test-Path -LiteralPath "$src.absent") { if (Test-Path -LiteralPath $src) { throw 'Ambiguous backup' } }
+    elseif (-not (Test-Path -LiteralPath $src -PathType Leaf) -or -not (Test-Path -LiteralPath "$src.sha256" -PathType Leaf)) { throw "Backup missing $rel" }
+    elseif ((Hash $src) -ne (Get-Content -Raw -LiteralPath "$src.sha256").Trim()) { throw "Corrupt backup $rel" }
+  }
+}
+function ApplyBackup([string]$b) {
+  foreach ($rel in $Files) {
+    $src=Join-Path $b $rel; $dst=[IO.Path]::GetFullPath((Join-Path $Target $rel))
+    # Only the four fixed allowlisted paths under resolved Target can be removed.
+    $expected=[IO.Path]::GetFullPath((Join-Path $Target $rel))
+    if ($dst -ne $expected -or -not $dst.StartsWith($Target + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected restore path' }
+    if (Test-Path -LiteralPath "$src.absent") { if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force } }
+    else { Copy-Item -LiteralPath $src -Destination $dst -Force }
+  }
+}
 if ($Restore) {
-  $b = Get-NewestBackup
-  if ([string]::IsNullOrWhiteSpace($b)) { Die "no backup found under $BackupRoot for profile '$TargetProfile' (nothing to restore)" }
-  Write-Info "restoring from: $b"
-  foreach ($rel in @('assets/whale-widget.js', 'lib/index.js')) {
-    $src = Join-Path $b $rel
-    if (-not (Test-Path $src)) { Die "backup is incomplete (missing $rel)" }
-    if ($DryRun) { Write-Info "would restore $rel" }
-    else {
-      Copy-Item -Path $src -Destination (Join-Path $Target $rel) -Force
-      Write-Info "restored $rel"
-    }
-  }
-  if (-not $DryRun) { Write-Ok 'restored. Refresh the page and restart DSH.' }
-  exit 0
+  $dirs=@(Get-ChildItem -LiteralPath $BackupRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$Selected-*" -and (Test-Path -LiteralPath (Join-Path $_.FullName '.complete')) } | Sort-Object @{Expression={(Get-Item -LiteralPath (Join-Path $_.FullName '.complete')).LastWriteTimeUtc}},Name)
+  if ($dirs.Count -eq 0) { throw 'No complete four-file backup found' }
+  $b=$dirs[-1].FullName; ValidateBackup $b
+  if ($DryRun) { Write-Host "Would restore $b"; exit 0 }
+  $undo="$(UniqueBackup)-restore-safety"; Backup $undo
+  try { ApplyBackup $b }
+  catch { try { ApplyBackup $undo } catch { Write-Error "ROLLBACK FAILED; recover from $undo" }; throw }
+  $marker=Join-Path $undo '.complete'
+  if ([IO.Path]::GetFullPath($marker) -ne [IO.Path]::GetFullPath((Join-Path $undo '.complete'))) { throw 'Unexpected safety path' }
+  Remove-Item -LiteralPath $marker -Force
+  Write-Host 'Restored all four files, including originally absent client. Restart DSH and hard-refresh.'; exit 0
 }
-
-# ---------------------------------------------------------------------------
-# install
-# ---------------------------------------------------------------------------
-$state = Get-State $Target
-switch ($state) {
-  'pristine' { }
-  'patched'  { Write-Info 'already patched - re-applying the overlay (idempotent).' }
-  default {
-    if (-not $Force) {
-      Write-Warn @"
-the installed plugin matches neither upstream $($m.upstreamVersion) (which this
-         overlay was built against) nor this overlay. That usually means a
-         different plugin version - do NOT force it here: the overlay would put
-         older upstream code back. Rebuild against this version instead:
-
-           copy "`$PLUGIN\assets\whale-widget.js" <src>\baseline\whale-widget.upstream.js
-           copy "`$PLUGIN\lib\index.js"           <src>\baseline\index.upstream.js
-           npm run build; npm run check           # in the source fork
-
-         Or re-run with -Force if you are sure (a backup is still taken).
-"@
-      exit 2
-    }
-    Write-Warn 'forcing the overlay over unrecognised plugin files (a backup is still kept).'
-  }
+# Prevalidate every payload before backup or mutation, including check and dry run.
+for ($i=0;$i -lt $Files.Count;$i++) {
+  $src=Join-Path $Payload $Files[$i]; $expected=Value "payload$($Keys[$i])Sha256"
+  if (-not (Test-Path -LiteralPath $src -PathType Leaf) -or (Hash $src) -ne $expected) { throw "Payload checksum mismatch: $($Files[$i])" }
 }
-
-# If both files already equal the payload there is nothing to preserve and
-# nothing to copy: skipping the backup here is what keeps -Restore meaningful
-# (a second re-apply must not bury the pristine backup under a "patched" one).
-$upToDate = ((Get-Sha (Join-Path $Target 'assets/whale-widget.js')) -eq $PayloadShaAssets) -and
-            ((Get-Sha (Join-Path $Target 'lib/index.js')) -eq $PayloadShaLib)
-if ($upToDate) {
-  Write-Ok 'Already up to date - the installed files match the overlay payload exactly.'
-  Write-Info 'nothing copied. Refresh the page if you have not since the last apply,'
-  Write-Info 'and restart DSH for the host half. Undo with: -Restore'
-  exit 0
-}
-
-# A unique directory per run: two re-applies inside the same second must not
-# overwrite the older (pristine) backup, which is the one a rollback wants.
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$Backup = Join-Path $BackupRoot "$TargetProfile-$stamp"
-if (Test-Path $Backup) {
-  $n = 2
-  while (Test-Path "$Backup-$n") { $n++ }
-  $Backup = "$Backup-$n"
-}
-
-if ($DryRun) {
-  Write-Info 'would back up assets\whale-widget.js and lib\index.js to:'
-  Write-Info "  $Backup"
-  Write-Info '(backups live under DSH_HOME, not in node_modules, so a plugin update cannot prune them)'
-  Write-Info 'would copy the overlay payload over those two files'
-  exit 0
-}
-
-New-Item -ItemType Directory -Force -Path (Join-Path $Backup 'assets') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $Backup 'lib')    | Out-Null
-Copy-Item -Path (Join-Path $Target 'assets/whale-widget.js') -Destination (Join-Path $Backup 'assets/whale-widget.js') -Force
-Copy-Item -Path (Join-Path $Target 'lib/index.js')           -Destination (Join-Path $Backup 'lib/index.js')           -Force
-Write-Info "backup    : $Backup"
-
-$rels = @{
-  'assets/whale-widget.js' = $PayloadShaAssets
-  'lib/index.js'           = $PayloadShaLib
-}
-foreach ($rel in $rels.Keys) {
-  $want = $rels[$rel]
-  $src  = Join-Path $PayloadDir $rel
-  $got  = Get-Sha $src
-  if ($want -ne $got) { Die "payload checksum mismatch for $rel (the repo copy is corrupted)" }
-  Copy-Item -Path $src -Destination (Join-Path $Target $rel) -Force
-  Write-Info "installed : $rel  ($((Get-Sha (Join-Path $Target $rel)).Substring(0,12))...)"
-}
-
-Write-Host ''
-Write-Ok "Done. The bilingual overlay is installed for the '$TargetProfile' profile."
-Write-Host @"
-
-Next steps
-  1. Refresh the DSH page (Ctrl+Shift+R). The widget half is re-read from disk
-     per request, so that alone updates the UI and the menu switch.
-  2. Restart DSH / the desktop app. Needed for the host half (lib\index.js):
-     error and toast text plus the factory-default bubble content.
-
-Verify
-  .\scripts\install-whale-i18n.ps1 -Check
-  curl.exe -s -o NUL -w "%{http_code}\n" http://127.0.0.1:<port>/dsh-whale/lang.json
-      # 404 before the restart, 401 after (registered, needs auth)
-  Get-Content "$DshHome\.dshw-lang.json"
-      # appears after the next page load: the widget telling the host its language
-
-Undo
-  .\scripts\install-whale-i18n.ps1 -Restore
-"@
+$st=State; Write-Host "profile: $Selected`nstate: $st"
+if ($Check) { if ($st -eq 'unknown') { exit 2 }; exit 0 }
+if ($st -eq 'patched') { Write-Host 'Already up to date; no backup or copy needed.'; exit 0 }
+if ($st -eq 'unknown' -and -not $Force) { Write-Warning 'Refusing drift: exact pristine, previous-overlay, codex-overlay, compact-overlay, or maid-overlay hashes required.'; exit 2 }
+if ($DryRun) { Write-Host 'Would back up and replace all four allowlisted files.'; exit 0 }
+$b=UniqueBackup; Backup $b
+try {
+  foreach ($rel in $Files) { Copy-Item -LiteralPath (Join-Path $Payload $rel) -Destination (Join-Path $Target $rel) -Force }
+  if (-not (Matches 'payload')) { throw 'Installed checksum mismatch' }
+} catch { try { ApplyBackup $b } catch { Write-Error "ROLLBACK FAILED; recover from $b" }; throw }
+Write-Host "Installed. Backup: $b"
+Write-Host 'Restart DSH (host + client registration), then hard-refresh. Stop DSH before -Restore.'
