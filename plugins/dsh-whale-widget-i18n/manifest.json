@@ -1,0 +1,20 @@
+{
+  "what": "Overlay that adds a bilingual Chinese/English interface with a language switch to the dsh-whale-widget DSH plugin.",
+  "upstreamPackage": "dsh-whale-widget",
+  "upstreamVersion": "0.3.18",
+  "upstreamRepository": "https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget",
+  "marker": "DSHW_I18N",
+  "hostMarker": "DSHW_HOST_I18N",
+  "payloadAssetsSha256": "b0bbed85028130836125f66288cc1947973305a653c1308b2841435d533e467e",
+  "payloadLibSha256": "df925e97318662466ba2fd3984a67e541f5fbee198d36f2b5ec8a9330aa2f89a",
+  "baseAssetsSha256": "391806b8d4fd7c77a1711e02f58360e641f97b97bfb9085049031365007301b0",
+  "baseLibSha256": "bf90af74d4c905215452ed4289854add14ba372ec304fad1b59da6f7e989a5ac",
+  "verifiedOn": "2026-10-06",
+  "verifiedHow": "Full gate suite green in the source fork (probe --strict, differential stub-DOM smoke test with 94/94 Chinese DOM writes identical to upstream, host apply+route smoke test, panel audit with 0 untranslated strings in any panel), plus a live check in the DSH desktop app: /dsh-whale/lang.json went 404 -> 401 and ~/.dsh/.dshw-lang.json appeared with lang=en.",
+  "notes": [
+    "The overlay files were built against upstream 0.3.18; the installer refuses to overwrite a plugin whose base files do not match baseAssetsSha256/baseLibSha256 unless --force/-Force is given.",
+    "Both dictionaries are inlined, so installing needs no build step and no network access when the plugin is already installed.",
+    "User data (bubble content, custom roles and audio, .dshw-lang.json) lives in DSH_HOME and is never touched.",
+    "dsh plugin refuses the desktop profile by design; for that profile the overlay is copied in place, which is why a re-apply script exists."
+  ]
+}
