@@ -40,7 +40,7 @@ function Matches([string]$Prefix) {
     elseif ((Hash $path) -ne $expected) { return $false }
   }; return $true
 }
-function State { if (Matches 'payload') { 'patched' } elseif (Matches 'base') { 'pristine' } elseif (Matches 'previous') { 'previous-overlay' } elseif (Matches 'codex') { 'codex-overlay' } elseif (Matches 'compact') { 'compact-overlay' } elseif (Matches 'maid') { 'maid-overlay' } else { 'unknown' } }
+function State { if (Matches 'payload') { 'patched' } elseif (Matches 'base') { 'pristine' } elseif (Matches 'previous') { 'previous-overlay' } elseif (Matches 'codex') { 'codex-overlay' } elseif (Matches 'compact') { 'compact-overlay' } elseif (Matches 'maid') { 'maid-overlay' } elseif (Matches 'quiet') { 'quiet-overlay' } else { 'unknown' } }
 function UniqueBackup {
   $base=Join-Path $BackupRoot "$Selected-$(Get-Date -Format yyyyMMdd-HHmmss)"; $n=0
   while (Test-Path -LiteralPath "$base-$n") { $n++ }; return "$base-$n"
@@ -97,7 +97,7 @@ for ($i=0;$i -lt $Files.Count;$i++) {
 $st=State; Write-Host "profile: $Selected`nstate: $st"
 if ($Check) { if ($st -eq 'unknown') { exit 2 }; exit 0 }
 if ($st -eq 'patched') { Write-Host 'Already up to date; no backup or copy needed.'; exit 0 }
-if ($st -eq 'unknown' -and -not $Force) { Write-Warning 'Refusing drift: exact pristine, previous-overlay, codex-overlay, compact-overlay, or maid-overlay hashes required.'; exit 2 }
+if ($st -eq 'unknown' -and -not $Force) { Write-Warning 'Refusing drift: exact pristine, previous-overlay, codex-overlay, compact-overlay, maid-overlay, or quiet-overlay hashes required.'; exit 2 }
 if ($DryRun) { Write-Host 'Would back up and replace all four allowlisted files.'; exit 0 }
 $b=UniqueBackup; Backup $b
 try {

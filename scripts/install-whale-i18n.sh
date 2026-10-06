@@ -35,7 +35,7 @@ BACKUP_ROOT="$DSH_HOME/.dshw-i18n-backups"
 # Package root can be a pnpm symlink, but managed files/directories cannot be.
 for rel in assets lib "${FILES[@]}"; do [ ! -L "$TARGET/$rel" ] || fail "refusing managed symlink: $rel"; done
 match() { local prefix="$1" i expected; for i in 0 1 2 3; do expected="$(get "${prefix}${KEYS[$i]}Sha256")"; if [ "$expected" = absent ]; then [ ! -e "$TARGET/${FILES[$i]}" ] || return 1; else [ -f "$TARGET/${FILES[$i]}" ] && [ "$(sha "$TARGET/${FILES[$i]}")" = "$expected" ] || return 1; fi; done; }
-state() { if match payload; then echo patched; elif match base; then echo pristine; elif match previous; then echo previous-overlay; elif match codex; then echo codex-overlay; elif match compact; then echo compact-overlay; elif match maid; then echo maid-overlay; else echo unknown; fi; }
+state() { if match payload; then echo patched; elif match base; then echo pristine; elif match previous; then echo previous-overlay; elif match codex; then echo codex-overlay; elif match compact; then echo compact-overlay; elif match maid; then echo maid-overlay; elif match quiet; then echo quiet-overlay; else echo unknown; fi; }
 # Backup hashes + absent markers let restore prevalidate everything before writing.
 backup_to() { local dest="$1" rel; mkdir -p "$dest"; for rel in "${FILES[@]}"; do mkdir -p "$(dirname "$dest/$rel")"; if [ -f "$TARGET/$rel" ]; then cp -p "$TARGET/$rel" "$dest/$rel"; sha "$dest/$rel" > "$dest/$rel.sha256"; elif [ ! -e "$TARGET/$rel" ]; then : > "$dest/$rel.absent"; else fail "not a regular file: $TARGET/$rel"; fi; done; : > "$dest/.complete"; }
 validate_backup() { local b="$1" rel expected; [ -f "$b/.complete" ] || fail 'backup incomplete or legacy two-file backup (use its original installer)'; for rel in "${FILES[@]}"; do if [ -f "$b/$rel.absent" ]; then [ ! -e "$b/$rel" ] || fail 'ambiguous backup'; else [ -f "$b/$rel" ] && [ -f "$b/$rel.sha256" ] || fail "backup missing $rel"; read -r expected < "$b/$rel.sha256"; [ "$(sha "$b/$rel")" = "$expected" ] || fail "corrupt backup: $rel"; fi; done; }
@@ -63,7 +63,7 @@ for i in 0 1 2 3; do rel="${FILES[$i]}"; expected="$(get "payload${KEYS[$i]}Sha2
 ST="$(state)"; printf 'profile: %s\nstate: %s\n' "$SELECTED" "$ST"
 if [ "$MODE" = check ]; then [ "$ST" != unknown ] || exit 2; exit 0; fi
 [ "$ST" != patched ] || { echo 'Already up to date; no backup or copy needed.'; exit 0; }
-if [ "$ST" = unknown ] && [ "$FORCE" = 0 ]; then echo 'Refusing drift: exact pristine, previous-overlay, codex-overlay, compact-overlay, or maid-overlay hashes required.' >&2; exit 2; fi
+if [ "$ST" = unknown ] && [ "$FORCE" = 0 ]; then echo 'Refusing drift: exact pristine, previous-overlay, codex-overlay, compact-overlay, maid-overlay, or quiet-overlay hashes required.' >&2; exit 2; fi
 [ "$DRY" = 0 ] || { echo 'Would back up and replace all four allowlisted files.'; exit 0; }
 b="$(unique_backup)"; backup_to "$b"
 rollback() { local status=$?; trap - EXIT; if [ "$status" != 0 ]; then apply_backup "$b" || echo "ROLLBACK FAILED: recover from $b" >&2; fi; exit "$status"; }

@@ -15469,18 +15469,23 @@ function dshwQuotaResetText(minutes, en) {
   if (mins || !parts.length) parts.push(mins + (en ? 'm' : '\u5206\u949f'))
   return parts.join(' ')
 }
+function dshwIsSubProvider(p) {
+  return p === 'codex' || p === 'antigravity'
+}
 function dshwQuotaText() {
   if (!dshwActiveChat) return null
   var en = dshwLang() === 'en'
   if (dshwActiveChat.provider === 'openai') return en ? 'ChatGPT quota not applicable\nLocal tokens unavailable' : 'ChatGPT \u989d\u5ea6\u4e0d\u9002\u7528\n\u672c\u5730 token \u4e0d\u53ef\u7528'
-  if (dshwActiveChat.provider !== 'codex') return null
+  if (!dshwIsSubProvider(dshwActiveChat.provider)) return null
   var data = dshwActiveChat
   if (data.status === 'loading') return en ? 'Quota loading\u2026' : '\u989d\u5ea6\u52a0\u8f7d\u4e2d\u2026'
   if (!data.windows || !data.windows.length) return en ? 'Quota unavailable' : '\u989d\u5ea6\u4e0d\u53ef\u7528'
   var stale = data.status === 'stale' || Date.now() - data.updatedAt > 120000 || data.windows.some(function (w) { return w.resetsAt !== null && w.resetsAt <= Date.now() })
   var lines = data.windows.map(function (w) {
     var remaining = Math.max(0, Math.min(100, Number(w.remaining) || 0))
-    var allowance = w.kind === 'session' ? (en ? 'five-hour' : '\u4e94\u5c0f\u65f6') : w.kind === 'weekly' ? (en ? 'weekly' : '\u6bcf\u5468') : String(w.kind)
+    var isWeekly = w.kind === 'weekly'
+    var isSession = w.kind === 'session' || w.kind === 'other' || w.kind === 'window'
+    var allowance = isSession ? (en ? 'five-hour' : '\u4e94\u5c0f\u65f6') : isWeekly ? (en ? 'weekly' : '\u6bcf\u5468') : String(w.kind)
     var text = en ? (w.kind === 'weekly' ? 'Your weekly allowance has ' + remaining + '% left, Sir.' : 'Sir, you have ' + remaining + '% left in your ' + allowance + ' allowance.') : '\u5148\u751f\uff0c\u60a8\u7684' + allowance + '\u989d\u5ea6\u8fd8\u5269 ' + remaining + '%\u3002'
     if (stale) text = (en ? 'Last known: ' : '\u4e0a\u6b21\u67e5\u8be2\uff1a') + text
     if (w.resetsAt !== null && isFinite(w.resetsAt) && w.resetsAt <= Date.now()) {
@@ -15518,12 +15523,12 @@ function dshwRenderQuota() {
   labelEl.className = 'dshwv-label'; amountEl.className = 'dshwv-amount'; hintEl.className = 'dshwv-hint'
   labelEl.style.display = ''; amountEl.style.display = ''; hintEl.style.display = ''
   hintEl.style.opacity = ''; hintEl.style.transition = ''
-  var codex = dshwActiveChat.provider === 'codex'
-  labelEl.textContent = codex ? (en ? 'At your service, Sir \u2661' : '\u7aed\u8bda\u4e3a\u60a8\u670d\u52a1\uff0c\u5148\u751f \u2661') : 'OpenAI API'
+  var isSub = dshwIsSubProvider(dshwActiveChat.provider)
+  labelEl.textContent = isSub ? (en ? 'At your service, Sir \u2661' : '\u7aed\u8bda\u4e3a\u60a8\u670d\u52a1\uff0c\u5148\u751f \u2661') : 'OpenAI API'
   var model = String(dshwActiveChat.model || '').replace(/\s+/g, ' ').trim()
-  var shortModel = model.length > 22 ? model.slice(0, 21) + '\u2026' : model
-  amountEl.textContent = (shortModel ? shortModel + ' \u00b7 ' : '') + (codex ? (en ? 'Default account' : '\u9ed8\u8ba4\u8d26\u6237') : (en ? 'API key' : 'API key'))
-  textBox.title = (model ? model + '\n' : '') + (codex ? (en ? 'Default account quota; not pool-route attribution.' : '\u9ed8\u8ba4\u8d26\u6237\u989d\u5ea6\uff0c\u975e\u6c60\u8def\u7531\u5f52\u5c5e\u3002') : (en ? 'API key usage is not ChatGPT subscription quota.' : 'API key \u7528\u91cf\u4e0d\u662f ChatGPT \u8ba2\u9605\u989d\u5ea6\u3002'))
+  var shortModel = model.length > 26 ? model.slice(0, 25) + '\u2026' : model
+  amountEl.textContent = (shortModel ? shortModel + ' \u00b7 ' : '') + (isSub ? (en ? 'Default account' : '\u9ed8\u8ba4\u8d26\u6237') : (en ? 'API key' : 'API key'))
+  textBox.title = (model ? model + '\n' : '') + (isSub ? (en ? 'Default account quota; not pool-route attribution.' : '\u9ed8\u8ba4\u8d26\u6237\u989d\u5ea6\uff0c\u975e\u6c60\u8def\u7531\u5f52\u5c5e\u3002') : (en ? 'API key usage is not ChatGPT subscription quota.' : 'API key \u7528\u91cf\u4e0d\u662f ChatGPT \u8ba2\u9605\u989d\u5ea6\u3002'))
   if (dshwActiveChat.updatedAt) textBox.title += '\n' + (en ? 'Last checked ' : '\u68c0\u67e5\u4e8e ') + new Date(dshwActiveChat.updatedAt).toLocaleTimeString()
   hintEl.textContent = text; lastHintText = text
   return true

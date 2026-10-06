@@ -36,14 +36,74 @@ git clone --depth 1 --sparse --filter=blob:none https://github.com/gnutnaux337/.
 
 ---
 
-## 4. dsh-whale-widget — bilingual interface and active Codex usage
+## 4. Current desktop plugins — install on another machine
+
+Snapshot of the six user-installed plugins in the current desktop profile:
+
+| Package | Installed version | Install specification |
+| --- | --- | --- |
+| `dsh-plugin` | `1.4.14` | `dsh-plugin@1.4.14` |
+| `dsh-plugin-subscriptions` | `0.9.7` | `dsh-plugin-subscriptions@0.9.7` |
+| `dsh-whale-widget` | `0.3.18` | `dsh-whale-widget@0.3.18` |
+| `@nagi-ovo/dsh-visualize` | `0.1.4` | `@nagi-ovo/dsh-visualize@0.1.4` |
+| `@dsh-external/dsh-super-injector` | `0.3.3` | `github:yjh051108/dsh-routing-suite` |
+| `dsh-custom-skin` | `0.1.0` | `github:slin-code/dsh-custom-skin` |
+
+The two GitHub sources are the sources used by this profile, not immutable version
+pins: installing them later may retrieve newer code. DSH's built-in base and web
+app bundles are not included here; they are provided by DSH itself.
+
+### Desktop app
+
+In a DSH chat, ask it to install the following packages into the **desktop profile**
+using its supported plugin installation mechanism:
+
+```text
+Please install these plugins in my DSH desktop profile:
+- dsh-plugin@1.4.14
+- dsh-plugin-subscriptions@0.9.7
+- dsh-whale-widget@0.3.18
+- @nagi-ovo/dsh-visualize@0.1.4
+- github:yjh051108/dsh-routing-suite
+- github:slin-code/dsh-custom-skin
+Keep existing plugins and settings. Do not install into the web profile instead.
+```
+
+Desktop plugin installation is managed by the app; do not substitute the web CLI
+command below for a desktop installation. After installation, restart DSH and
+hard-refresh its page. Log into your Codex account through the subscriptions
+plugin; installation alone does not copy accounts or credentials.
+
+Then apply the whale overlay from section 5. Install upstream whale **0.3.18**
+first, because the overlay requires the supported exact upstream/overlay hashes.
+Updating or reinstalling the upstream whale may overwrite the overlay; reapply
+only if the installer reports a supported state, rather than forcing newer code.
+
+### Web profile — optional, separate from desktop
+
+For a CLI-managed web profile, the equivalent installation is:
+
+```bash
+dsh plugin --profile web add dsh-plugin@1.4.14 dsh-plugin-subscriptions@0.9.7 dsh-whale-widget@0.3.18 @nagi-ovo/dsh-visualize@0.1.4 github:yjh051108/dsh-routing-suite github:slin-code/dsh-custom-skin
+```
+
+This command also works in PowerShell. It installs into **web only**, not desktop.
+Restart your web-profile DSH process afterwards. Apply the whale overlay using
+`--profile web` (Bash) or `-Profile web` (PowerShell), as described below.
+
+This repository packages the whale overlay only, not the other plugins or your
+personal routing, skin, account, or subscription settings. Those must be configured
+separately on the new machine.
+
+## 5. dsh-whale-widget — bilingual interface and active Codex/Antigravity usage
 
 Adds an English interface with a language switch to the `dsh-whale-widget` DSH
 plugin (upstream is Chinese-only). Both dictionaries are inlined in the overlay,
 so installing needs no build step and no network.
 
-The whale also follows the active chat's Codex/ChatGPT provider and displays
-subscription usage windows supplied by the **default Codex subscription account**.
+The whale also follows the active chat's Codex/Antigravity provider and displays
+subscription usage windows supplied by the **default subscription account** (such
+as 5h session and weekly allowances, scoped to the current model for Antigravity).
 This does not identify the account selected by a routing pool for a particular
 request. Missing/stale quota is labelled rather than treated as unlimited;
 API-key usage is not a ChatGPT subscription balance. Local token fallback is not
@@ -54,7 +114,7 @@ balance display. No credentials or account state are shipped in this repo.
 
 - Centered, responsive maid-style quota text: **At your service, Sir ♡**.
 - Shows remaining five-hour and weekly allowances with live reset countdowns
-  (for example, `3h 56m` or `6d 10h 50m`), using the default Codex account.
+  (for example, `3h 56m` or `6d 10h 50m`), using the active provider's default account.
 - Clearly marks stale values as last known and expired resets as awaiting refreshed quota.
 - Suppresses **only the DeepSeek low-balance popup at startup**. An already-low
   initial balance stays quiet; after recovery above the configured threshold,
@@ -65,7 +125,7 @@ balance display. No credentials or account state are shipped in this repo.
 
 The latest overlay is saved in this repository. No build is needed. Install the
 upstream `dsh-whale-widget` plugin first; for subscription quota, also make sure
-`dsh-plugin-subscriptions` is available and your Codex account is logged in.
+`dsh-plugin-subscriptions` is available and your Codex or Antigravity account is logged in.
 
 **Quit DSH before installing**, then run from this repository's root:
 
@@ -87,7 +147,7 @@ bash scripts/install-whale-i18n.sh --profile desktop --check
 ```
 
 For the web profile, substitute `web` for `desktop`. Restart DSH after installation
-and hard-refresh the page. Open a Codex chat to see the maid-style quota display.
+and hard-refresh the page. Open a Codex or Antigravity chat to see the maid-style quota display.
 Reopening the app with an already-low DeepSeek balance should no longer show its
 startup low-balance popup.
 
