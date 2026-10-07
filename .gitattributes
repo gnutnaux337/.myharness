@@ -1,0 +1,3 @@
+# Preserve LF for payload files – checksums in manifest.json are computed
+# against LF endings; Windows autocrlf must not convert these files.
+plugins/dsh-whale-widget-i18n/payload/**  text  eol=lf
